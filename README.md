@@ -1,106 +1,67 @@
-<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/social-preview-dark.png">
+  <img src="docs/social-preview.png" alt="Sentinel-RAG. Guideline answers that flag a clinician instead of guessing." width="100%">
+</picture>
 
-# Sentinel-RAG
-
-**Clinical Protocol Guardian**
-
-Guideline-grounded answers that **refuse to be confidently wrong**. Retrieve from your own protocol documents, generate a draft, score grounding, then either show the answer, retry, or FLAG a clinician.
-
-This GitHub repository keeps the runnable product in [`sentinel-rag/`](sentinel-rag/).
-
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](sentinel-rag/README.md)
-[![Next.js](https://img.shields.io/badge/Landing-Next.js-000000?logo=nextdotjs)](sentinel-rag/landing)
-[![License](https://img.shields.io/badge/License-MIT-green)](sentinel-rag/LICENSE)
-[![Demo](https://img.shields.io/badge/Demo-plays%20on%20this%20page-14B8A6)](#watch-the-demo)
-
-**Full product README → [sentinel-rag/README.md](sentinel-rag/README.md)**
-
-</div>
-
----
-
-## The problem
-
-In clinical protocol work, a fluent hallucination is not a UX bug. It is a safety event: a confident wrong dose, contraindication, or “first-line” step.
-
-Standard RAG retrieves chunks, stuffs them into a prompt, and returns whatever the model produces on the **first pass**. The model’s tone is not a measure of grounding. Supervisors cannot see *why* the system was sure.
-
-## What this software does
-
-Sentinel-RAG answers questions **only from ingested guideline text**, then **audits the draft before anyone sees it**:
-
-```text
-Question  →  Retrieve guideline chunks (local ChromaDB)
-          →  Generate a draft (context only, Groq Llama 3.1 8B)
-          →  Reflect (deterministic confidence — not a second LLM)
-          →  high    →  show the answer + citations
-          →  medium  →  retrieve more and retry
-          →  low     →  FLAG for clinical review
-```
-
-The scorer in `src/reflection.py` is inspectable (coverage, hedging, specificity, contradiction). Using another model as the only safety check would stack hallucination on hallucination.
-
-*Research prototype — not a medical device. Do not use for clinical decisions.*
-
----
-
-## Watch the demo
-
-The walkthrough **plays on this page**.
+**Guideline-grounded answers that refuse to be confidently wrong.**
 
 <p align="center">
-  <img src="sentinel-rag/docs/demo.gif" alt="Sentinel-RAG walkthrough — plays inline" width="920"/>
+  <img src="sentinel-rag/docs/demo.gif" alt="Sentinel-RAG walkthrough: landing, pipeline, and a flagged answer" width="920">
 </p>
 
-| In the clip | Why it matters |
-| --- | --- |
-| Hero | Safety layer, not a fluent chatbot |
-| Pipeline | Retrieve → generate → reflect → FLAG |
-| Eval | Metrics from `scripts/run_eval.py` |
-| Workspace | Same idea, interactive (`/workspace`) |
+Research prototype. Not a medical device. The bundled corpus is a fictional diabetes guideline.
 
-The GIF is the **portfolio + workspace chrome**. Live answers also need FastAPI with `GROQ_API_KEY`. The bundled corpus is a **sample diabetes guideline**; other topics will FLAG often, by design.
+## Problem
 
----
+A fluent wrong answer about a dose, a contraindication, or a first-line step is a patient-safety event. Ordinary RAG returns the first draft.
 
-## Repository map
+## Solution
 
-```text
-sentinal_rag/                         ← GitHub root
-└── sentinel-rag/                     ← runnable product
-    ├── src/                          agent, retrieval, reflection, FastAPI
-    ├── landing/                      Next.js portfolio + /workspace
-    ├── app.py                        Streamlit workspace
-    ├── data/guidelines/
-    ├── docs/                         PRD, architecture, clinical safety
-    │   └── demo.gif
-    └── README.md
+Sentinel-RAG answers only from guidelines the operator ingested. It scores the draft in code, then returns it, retries with a wider retrieval, or marks it FLAG for a clinician.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  retrieve["retrieve\nChroma top-k"] --> generate["generate\nGroq Llama 3.1 8B"]
+  generate --> reflect["reflect\ndeterministic score"]
+  reflect -->|"medium, retries left"| retrieve
+  reflect -->|"high, or FLAG"| output["output"]
 ```
 
----
+Four LangGraph nodes, compiled in `sentinel-rag/src/agent.py`: `retrieve`, `generate`, `reflect`, `output`. FLAG is a decision on `reflect`, written by `output`.
 
-## Quick start
+## Tech stack
+
+Python, LangGraph, LangChain, Chroma, sentence-transformers, Groq, FastAPI, Streamlit, Next.js landing, Docker, SQLAlchemy.
+
+## Quickstart
+
+From `sentinel-rag/`:
 
 ```bash
-cd sentinel-rag
+cp .env.example .env
 pip install -r requirements.txt
-cp .env.example .env          # add GROQ_API_KEY
-python -m src.ingest
-
-# Terminal 1
 uvicorn src.api.main:app --reload --port 8000
+streamlit run app.py
+```
 
-# Terminal 2
+Set `GROQ_API_KEY` for live answers. The landing page:
+
+```bash
 cd landing && npm install && npm run dev
 ```
 
-| Surface | URL |
-| --- | --- |
-| Portfolio | http://localhost:3000 |
-| Live workspace | http://localhost:3000/workspace |
-| API docs | http://localhost:8000/docs |
-| Streamlit (optional) | `streamlit run app.py` → :8501 |
+Docker: `docker compose up --build` from `sentinel-rag/`. UI on port 8501, API on port 8000.
 
----
+## Results
 
-<p align="center"><sub>Sentinel-RAG · grounded, self-auditing, willing to escalate</sub></p>
+No accuracy figure is published here. The product README states that no accuracy number is asserted until it is measured. What the graph does is inspectable in tests: a draft with no grounding is flagged.
+
+## Roadmap
+
+The open product notes live in `sentinel-rag/docs/`. Live multi-tenant clinic deployment is not claimed.
+
+## License
+
+MIT. The license file is `sentinel-rag/LICENSE`.
